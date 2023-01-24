@@ -1,0 +1,4 @@
+Maintainer: YOUR-COMPANY
+Architecture: all
+Description: YOUR Package
+Depends: python (=3.8)

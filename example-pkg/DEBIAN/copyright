@@ -1,0 +1,8 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Traffic Recognizer (vehicle class)
+Upstream-Contact: Name, <request@codeinside.ru>
+Files: debian/*
+Copyright: 2022, Name, <request@codeinside.ru>
+License:
+ Full text of licence.
+...

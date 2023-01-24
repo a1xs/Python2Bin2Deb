@@ -1,0 +1,8 @@
+ [Unit]
+ Description=example Daemon service
+ [Service]
+ ExecStart= /opt/example-service/example --logfile=/var/log/example.log
+ SuccessExitStatus=143
+ User=root
+ [Install]
+ WantedBy=multi-user.target
