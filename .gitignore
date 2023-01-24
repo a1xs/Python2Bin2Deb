@@ -1,0 +1,9 @@
+venv
+*.deb
+*.log
+/.idea/
+/build/
+/dist/
+
+
+
