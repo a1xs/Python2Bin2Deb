@@ -1,8 +1,20 @@
- [Unit]
- Description=example Daemon service
- [Service]
- ExecStart= /opt/example-service/example --logfile=/var/log/example.log
- SuccessExitStatus=143
- User=root
- [Install]
- WantedBy=multi-user.target
+[Install]
+WantedBy=multi-user.target
+
+[Unit]
+Description=rtdts service
+After=network.target
+
+[Service]
+#Type=notify
+User=nvidia
+Group=nvidia
+PrivateTmp=true
+WorkingDirectory=/opt/rtdts-service/
+ExecStart= /opt/rtdts-service/rtdts
+Restart=always
+    # on-watchdog, on-failure
+#ExecStartPre=/usr/local/bin/ste
+#MemoryAccounting=true
+#MemoryHigh=30%
+#MemoryMax=30%
