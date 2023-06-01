@@ -2,52 +2,126 @@ image: ubuntu:20.04
 
 variables:
   PACKAGE: example-pkg
-  NAME: example
+  USER: $CI_USER
+  PASSWORD: $CI_PASSWORD
+  IP: $CI_IP
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PACK_BUILD: "1"
 
 stages:
+#  - sonar
   - build
+  - package
   - release
 
-build:
+#sonarqube-check:
+#  stage: sonar
+#  image:
+#    name: sonarsource/sonar-scanner-cli:latest
+#    entrypoint: [""]
+#  variables:
+#    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
+#    GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+#  cache:
+#    key: "${CI_JOB_NAME}"
+#    paths:
+#      - .sonar/cache
+#  script:
+#    - sonar-scanner
+#  allow_failure: true
+#  rules:
+#    - if: $CI_COMMIT_TAG =~ /^(\d+\.)?(\d+\.)?(\*|\d+)$/ || $CI_COMMIT_BRANCH == 'release_box'
+#    - when: never
+
+
+build-bin:
   stage: build
+  tags:
+    - jetson
   before_script:
-    - apt update -y
-    - apt install git -y && apt install python3.8 -y && apt install -y python3-pip -y && pip install --user pyinstaller
     - chmod -R 755 $PACKAGE
     - export PATH=$PATH:/root/.local/bin
+    - ls $PACKAGE/opt/$PACKAGE-service/
+    - pip config --user set global.index http://nexus.YOURNAME.dmz:8081/repository/pypi-proxy/pypi || true
+    - pip config --user set global.index-url http://nexus.YOURNAME.dmz:8081/repository/pypi-proxy/simple || true
+    - pip config --user set global.trusted-host nexus.YOURNAME.dmz || true
+    - pip install -r requirements.txt
   script:
-    - pip install --user -r requirements.txt
-    - pyinstaller -D -F -n main -c "main.py" --collect-submodules kombu
+    - pyinstaller -D -F -n $PACKAGE -c "main.py" --key=$PI_KEY --add-binary '/usr/lib/aarch64-linux-gnu/gstreamer-1.0/deepstream/*.so:.' --add-binary '/usr/lib/aarch64-linux-gnu/libgeos_c.so:.' --collect-submodules flask
     - du -hs ./dist/
+  cache:
+    paths:
+      - .cache/pip
   rules:
-    - if: $CI_COMMIT_TAG =~ /^(\d+\.)?(\d+\.)?(\*|\d+)$/
+    - if: $CI_COMMIT_TAG =~ /^(\d+\.)?(\d+\.)?(\*|\d+)$/ || $CI_COMMIT_BRANCH == 'release_box'
     - when: never
   artifacts:
     paths:
       - dist/
     expire_in: 1h
 
-release:
-  stage: release
+.package-deb_template:
+  stage: package
+  tags:
+    - jetson
+  dependencies:
+    - build-bin
   before_script:
-    - apt update -y
     - chmod -R 755 $PACKAGE
-    - export PATH=$PATH:/root/.local/bin && export PACKAGE_VERSION=$CI_COMMIT_TAG && export BUILDTIME=$(date +"%s")
-    - cp -R ./dist/main $PACKAGE/opt/$NAME-service/$NAME
+    - cp -R ./$CONFIGS/ $PACKAGE/opt/$PACKAGE-service/config
+    - wget -q https://storage.YOURNAME.ru/projects/tracker-auto/$MODELS
+    - unzip -q $MODELS -d $PACKAGE/opt/$PACKAGE-service/models/
+    - export PATH=$PATH:/root/.local/bin && export PACKAGE_VERSION=$CI_COMMIT_TAG
+    - cp -R ./dist/$PACKAGE $PACKAGE/opt/$PACKAGE-service/$PACKAGE
     - "echo Package: $PACKAGE >> $PACKAGE/DEBIAN/control"
     - "echo Version: $PACKAGE_VERSION >> $PACKAGE/DEBIAN/control"
     - "echo >> $PACKAGE/DEBIAN/control"
     - cat $PACKAGE/DEBIAN/control
-
+    - chmod -R 755 $PACKAGE
   script:
       - dpkg-deb --build $PACKAGE
       - mkdir -p releases
-      - mv $PACKAGE.deb releases/$PACKAGE-$PACKAGE_VERSION-$BUILDTIME-all.deb
-      - du -hs ./releases
+      - mv $PACKAGE.deb releases/${PACKAGE}_${CI_COMMIT_TAG}-${PACK_BUILD}_${BOARD}_arm64.deb
+#      - du -hs ./releases
+      - ls -s ./releases
   rules:
-    - if: $CI_COMMIT_TAG =~ /^(\d+\.)?(\d+\.)?(\*|\d+)$/
+    - if: $CI_COMMIT_TAG =~ /^(\d+\.)?(\d+\.)?(\*|\d+)$/ && $CI_DEFAULT_BRANCH == 'release_box'
     - when: never
   artifacts:
     paths:
       - releases/
-    expire_in: 2h
+    expire_in: 3h
+
+package-deb_nano:
+  extends: .package-deb_template
+  variables:
+    BOARD: 'nano'
+    MODELS: 'Jetson_Nano_6.0_mod.zip'
+    CONFIGS: 'config_jetson'
+
+package-deb_tx2:
+  extends: .package-deb_template
+#  before_script:
+#    - 'echo >> Environment="LD_PRELOAD=/opt/rtdts-service/models/libmyplugins.so" >> $PACKAGE/etc/systemd/system/rtdts.service'
+  variables:
+    BOARD: 'tx2'
+    MODELS: 'Jetson_TX2_6.0_mod.zip'
+    CONFIGS: 'config_jetson'
+
+release-s3:
+  stage: release
+  tags:
+    - jetson
+  dependencies:
+    - package-deb_nano
+    - package-deb_tx2
+  script:
+    - du -hs ./releases
+    - ls -s ./releases
+    - echo ${S3_EXTRA_OPTS}$${S3_BUCKET}/${CI_COMMIT_TAG}/${CI_COMMIT_TAG_MESSAGE}/
+    - aws ${S3_EXTRA_OPTS} s3 cp releases/ s3://${S3_BUCKET}/${CI_COMMIT_TAG_MESSAGE}/${CI_COMMIT_TAG}/ --recursive
+  variables:
+    CI_COMMIT_TAG_MESSAGE: "stable"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^(\d+\.)?(\d+\.)?(\*|\d+)$/ && $CI_DEFAULT_BRANCH == 'release_box'
+    - when: never
