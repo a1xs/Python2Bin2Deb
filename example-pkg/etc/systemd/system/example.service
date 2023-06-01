@@ -2,16 +2,16 @@
 WantedBy=multi-user.target
 
 [Unit]
-Description=rtdts service
+Description=example service
 After=network.target
 
 [Service]
 #Type=notify
-User=nvidia
-Group=nvidia
+User=example
+Group=example
 PrivateTmp=true
-WorkingDirectory=/opt/rtdts-service/
-ExecStart= /opt/rtdts-service/rtdts
+WorkingDirectory=/opt/example-service/
+ExecStart= /opt/example-service/example
 Restart=always
     # on-watchdog, on-failure
 #ExecStartPre=/usr/local/bin/ste
