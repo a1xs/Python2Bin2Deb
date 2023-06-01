@@ -1,0 +1,15 @@
+#!/bin/sh
+
+SERVICE_NAME="example.service"
+
+SERVICE_STATUS=$(systemctl status $SERVICE_NAME)
+
+if [[ $SERVICE_STATUS == *"Active: active"* ]]; then
+    echo "Service $SERVICE_NAME started"
+    sudo systemctl restart $SERVICE_NAME
+    echo "Service $SERVICE_NAME restarted"
+else
+    systemctl enable $SERVICE_NAME
+    systemctl start $SERVICE_NAME
+    echo "Service $SERVICE_NAME is starting"
+fi
